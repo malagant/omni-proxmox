@@ -135,6 +135,34 @@ Provider-Container neben Omni.
 an, validiert das Cluster-Template, synchronisiert es und holt am Ende kubeconfig
 und talosconfig.
 
+## Zugangsdaten
+
+Der Login am Omni-UI läuft über Dex:
+
+| | |
+|---|---|
+| Benutzer | der Wert von `OMNI_USER_EMAIL` aus `config/omni.env` |
+| Passwort | das bei `scripts/10-secrets.sh` eingegebene |
+
+Das Passwort liegt nirgends im Klartext. `10-secrets.sh` reicht es direkt an
+`htpasswd` weiter und speichert nur den bcrypt-Hash in
+`secrets/dex-password.hash`. `secrets/dex-client-secret` ist etwas anderes: das
+OAuth2-Client-Secret zwischen Omni und Dex, zum Anmelden unbrauchbar.
+
+**Passwort vergessen?** Nur diese eine Datei löschen und das Skript ohne
+`--force` erneut laufen lassen — alle anderen Geheimnisse bleiben unangetastet:
+
+```bash
+rm secrets/dex-password.hash
+scripts/10-secrets.sh        # fragt nur das Passwort neu ab
+scripts/20-deploy-omni.sh    # rollt die neue dex.yaml aus
+```
+
+`scripts/10-secrets.sh --force` ist dafür der falsche Weg: es erzeugt auch
+`omni.asc` neu, den Schlüssel für Omnis etcd-Verschlüsselung. Ein bestehender
+Omni-Bestand wäre danach unlesbar — Cluster, Maschinen, Benutzer und
+Service-Accounts inklusive. Das Skript fragt in dem Fall inzwischen nach.
+
 ## Entscheidungen, die vom Standard abweichen
 
 **`providerdata` in snake_case.** Das README des Proxmox-Providers zeigt an einer

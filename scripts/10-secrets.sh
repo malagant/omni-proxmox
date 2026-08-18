@@ -17,6 +17,21 @@ need_cmd docker "wird nur fuer den bcrypt-Hash gebraucht"
 FORCE=0
 if [[ "${1:-}" == "--force" ]]; then FORCE=1; fi
 
+# Ein neuer GPG-Schluessel macht bereits verschluesselte etcd-Daten unlesbar.
+# Solange keiner existiert, ist --force harmlos — danach nicht mehr.
+if (( FORCE )) && [[ -s "${SECRETS_DIR}/omni.asc" ]]; then
+  warn "--force erzeugt auch den GPG-Schluessel neu, mit dem Omni seine etcd-Daten"
+  warn "verschluesselt. Ein bereits laufender Omni-Bestand waere danach unlesbar:"
+  dim  "Cluster, Maschinen, Benutzer und Service-Accounts sind dann verloren."
+  echo
+  dim  "Nur einzelne Geheimnisse erneuern: die betreffende Datei loeschen und"
+  dim  "dieses Skript ohne --force starten. Beispiel fuer ein neues Passwort:"
+  dim  "  rm secrets/dex-password.hash && scripts/10-secrets.sh"
+  echo
+  read -rp "     Trotzdem alles neu erzeugen? Tippe 'alles neu': " confirm
+  [[ "${confirm}" == "alles neu" ]] || { log "Abgebrochen."; exit 0; }
+fi
+
 mkdir -p "${SECRETS_DIR}"
 chmod 700 "${SECRETS_DIR}"
 
@@ -141,7 +156,8 @@ else
   (( ${#PW1} >= 8 )) || die "Passwort muss mindestens 8 Zeichen haben"
 
   # bcrypt via httpd-Image; lokal ist htpasswd auf macOS nicht bcrypt-faehig.
-  docker run --rm httpd:2.4-alpine htpasswd -Bbn admin "${PW1}" 2>/dev/null \
+  # -C 15 setzt den Kostenfaktor; ohne die Option waeren es nur 5.
+  docker run --rm httpd:2.4-alpine htpasswd -Bbn -C 15 admin "${PW1}" 2>/dev/null \
     | cut -d: -f2 | tr -d '\n' > "${DEX_HASH}"
   unset PW1 PW2
   [[ -s "${DEX_HASH}" ]] || die "Passworthash konnte nicht erzeugt werden"
