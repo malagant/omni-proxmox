@@ -124,20 +124,29 @@ ok "${OMNICONFIG_FILE}"
 dim "Alle Skripte hier setzen OMNICONFIG automatisch auf diese Datei."
 dim "Fuer omnictl von Hand:  export OMNICONFIG=${OMNICONFIG_FILE}"
 
-# --- 4. Verbindung testen --------------------------------------------------
-log "Teste die Verbindung"
-dim "Beim ersten Aufruf oeffnet omnictl den Browser zur Anmeldung bei Dex."
+# --- 4. Anmelden -----------------------------------------------------------
+log "Anmeldung"
+dim "Beim ersten Aufruf hat omnictl noch keinen Schluessel und meldet:"
+dim "  \"Could not authenticate: open ~/.talos/keys/...pgp: no such file\""
+dim "Das ist ein Hinweis, kein Fehler. omnictl oeffnet daraufhin den Browser"
+dim "und wartet, bis du den Schluessel dort freigibst."
 dim "Login: ${OMNI_USER_EMAIL} mit dem Passwort aus scripts/10-secrets.sh"
 echo
-if omni get clusters 2>&1 | head -20; then
+
+# Ausgabe bewusst NICHT umleiten oder durch eine Pipe schicken: omnictl startet
+# den Browser-Flow nur, wenn stdout ein Terminal ist. Mit Pipe bricht es
+# stattdessen mit einem irrefuehrenden "Error: ...pgp: no such file" ab.
+if omni get clusters; then
   echo
   ok "omnictl spricht mit Omni."
 else
   echo
   warn "Verbindung noch nicht moeglich. Haeufige Ursachen:"
-  dim "  - EULA noch nicht bestaetigt: https://${OMNI_ENDPOINT}/eula im Browser oeffnen"
+  dim "  - Schluessel im Browser noch nicht freigegeben (obige URL oeffnen)"
+  dim "  - EULA noch nicht bestaetigt: https://${OMNI_ENDPOINT}/eula"
   dim "  - CA nicht vertraut (Schritt 2)"
   dim "  - ${OMNI_ENDPOINT} loest nicht auf (Schritt 1)"
+  dim "  - ohne Terminal gestartet: omnictl kann den Browser-Flow dann nicht fuehren"
 fi
 
 echo
