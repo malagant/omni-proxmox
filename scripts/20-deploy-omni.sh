@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Rendert den Omni-Stack, kopiert ihn auf den Omni-Host und startet ihn.
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+load_config
+require_vars OMNI_SSH OMNI_HOST_IP OMNI_ENDPOINT AUTH_ENDPOINT OMNI_USER_EMAIL \
+             OMNI_REMOTE_DIR OMNI_VERSION DEX_VERSION
+
+need_cmd rsync
+need_cmd ssh
+
+STAGE="${OUT_DIR}/omni-host"
+
+# --- 1. Geheimnisse einlesen ----------------------------------------------
+for f in ca.pem server-key.pem server-chain.pem omni.asc dex-password.hash dex-client-secret; do
+  [[ -s "${SECRETS_DIR}/${f}" ]] || die "secrets/${f} fehlt — erst scripts/10-secrets.sh ausfuehren"
+done
+
+DEX_PASSWORD_HASH="$(cat "${SECRETS_DIR}/dex-password.hash")"
+DEX_CLIENT_SECRET="$(cat "${SECRETS_DIR}/dex-client-secret")"
+export DEX_PASSWORD_HASH DEX_CLIENT_SECRET
+
+# --- 2. Stack rendern ------------------------------------------------------
+log "Rendere Stack nach ${STAGE}"
+rm -rf "${STAGE}"
+mkdir -p "${STAGE}/secrets" "${STAGE}/sqlite"
+
+render_template "${REPO_ROOT}/stack/docker-compose.yaml.tmpl" "${STAGE}/docker-compose.yaml"
+render_template "${REPO_ROOT}/stack/dex.yaml.tmpl"            "${STAGE}/dex.yaml"
+
+# Ohne EULA-Angaben die Flags entfernen — Omni lehnt leere Werte ab.
+if [[ -z "${EULA_NAME:-}" || -z "${EULA_EMAIL:-}" ]]; then
+  sed -i.bak '/--eula-accept-/d' "${STAGE}/docker-compose.yaml"
+  rm -f "${STAGE}/docker-compose.yaml.bak"
+  warn "EULA-Flags weggelassen — beim ersten UI-Aufruf leitet Omni auf /eula um"
+fi
+
+# Nur die Dateien mitschicken, die der Stack wirklich braucht.
+for f in ca.pem server-key.pem server-chain.pem omni.asc; do
+  cp "${SECRETS_DIR}/${f}" "${STAGE}/secrets/${f}"
+done
+chmod 600 "${STAGE}/secrets/server-key.pem" "${STAGE}/secrets/omni.asc"
+chmod 644 "${STAGE}/secrets/ca.pem" "${STAGE}/secrets/server-chain.pem"
+ok "gerendert"
+
+# --- 3. Auf den Host kopieren ---------------------------------------------
+log "Kopiere nach ${OMNI_SSH}:${OMNI_REMOTE_DIR}"
+on_host "mkdir -p '${OMNI_REMOTE_DIR}'"
+rsync -a --delete \
+  --exclude 'sqlite/' \
+  -e "ssh -o StrictHostKeyChecking=accept-new" \
+  "${STAGE}/" "${OMNI_SSH}:${OMNI_REMOTE_DIR}/"
+on_host "mkdir -p '${OMNI_REMOTE_DIR}/sqlite' && chmod 700 '${OMNI_REMOTE_DIR}/secrets'"
+ok "kopiert"
+
+# --- 4. Hostnamen auf dem Omni-Host aufloesen ------------------------------
+# Omni redet ueber die .internal-Namen mit sich selbst und mit Dex.
+log "Trage ${OMNI_ENDPOINT} und ${AUTH_ENDPOINT} in /etc/hosts des Hosts ein"
+on_host "grep -q '${OMNI_ENDPOINT}' /etc/hosts || echo '127.0.0.1 ${OMNI_ENDPOINT} ${AUTH_ENDPOINT}' >> /etc/hosts"
+ok "/etc/hosts gesetzt"
+
+# --- 5. Starten ------------------------------------------------------------
+log "Starte den Stack"
+on_host "cd '${OMNI_REMOTE_DIR}' && docker compose pull --quiet && docker compose up -d"
+
+log "Container"
+on_host "cd '${OMNI_REMOTE_DIR}' && docker compose ps --format 'table {{.Name}}\t{{.Status}}'" || true
+
+# --- 6. Warten und pruefen -------------------------------------------------
+omni_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:443" 2>/dev/null; }
+if wait_for 180 "Omni auf Port 443" omni_up; then
+  ok "Omni antwortet"
+else
+  warn "Omni antwortet nicht. Logs:"
+  on_host "cd '${OMNI_REMOTE_DIR}' && docker compose logs --tail=40 omni" || true
+  die "Abbruch"
+fi
+
+dex_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:5556/.well-known/openid-configuration" 2>/dev/null; }
+if wait_for 60 "Dex auf Port 5556" dex_up; then
+  ok "Dex antwortet"
+else
+  warn "Dex antwortet nicht. Logs:"
+  on_host "cd '${OMNI_REMOTE_DIR}' && docker compose logs --tail=40 dex" || true
+fi
+
+echo
+ok "Omni laeuft auf ${OMNI_SSH}."
+dim "Naechster Schritt: scripts/30-client-setup.sh"

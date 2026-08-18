@@ -1,0 +1,29 @@
+# Generiert von scripts/20-deploy-omni.sh — nicht auf dem Host editieren.
+#
+# Dex ist der OIDC-Provider, den Omni fuer die Anmeldung braucht. Hier mit einem
+# statischen Benutzer. Fuer LDAP, GitHub, Okta oder SAML lassen sich stattdessen
+# Dex-Connectors konfigurieren: https://dexidp.io/docs/connectors/
+issuer: https://${AUTH_ENDPOINT}:5556
+
+storage:
+  type: memory
+
+web:
+  https: 0.0.0.0:5556
+  tlsCert: /etc/dex/tls/server-chain.pem
+  tlsKey: /etc/dex/tls/server-key.pem
+
+enablePasswordDB: true
+
+staticClients:
+  - name: Omni
+    id: omni
+    secret: ${DEX_CLIENT_SECRET}
+    redirectURIs:
+      - https://${OMNI_ENDPOINT}/oidc/consume
+
+staticPasswords:
+  - email: "${OMNI_USER_EMAIL}"
+    username: "admin"
+    preferredUsername: "admin"
+    hash: "${DEX_PASSWORD_HASH}"

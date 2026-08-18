@@ -1,0 +1,21 @@
+# Generiert von scripts/50-cluster.sh — Aenderungen dort vornehmen.
+#
+# Das Cluster-Template ist die massgebliche Beschreibung des Clusters. Omni
+# gleicht den Ist-Zustand fortlaufend dagegen ab. Skalieren heisst: size
+# aendern und erneut syncen — nicht im UI klicken.
+kind: Cluster
+name: ${CLUSTER_NAME}
+kubernetes:
+  version: ${KUBERNETES_VERSION}
+talos:
+  version: ${TALOS_VERSION}
+---
+kind: ControlPlane
+machineClass:
+  name: ${CLUSTER_NAME}-controlplane
+  size: ${CONTROL_PLANE_COUNT}
+---
+kind: Workers
+machineClass:
+  name: ${CLUSTER_NAME}-worker
+  size: ${WORKER_COUNT}

@@ -1,0 +1,13 @@
+# Secrets — niemals committen
+config/omni.env
+secrets/
+*.pem
+*.asc
+*.key
+omniconfig.yaml
+*.kubeconfig
+
+# Generierte Artefakte
+out/
+bin/
+.cache/

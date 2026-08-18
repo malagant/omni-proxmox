@@ -1,0 +1,33 @@
+# Generiert von scripts/50-cluster.sh — Aenderungen dort vornehmen.
+#
+# Eine MachineClass vom Typ autoprovision beschreibt nicht "welche vorhandenen
+# Maschinen passen", sondern "wie sollen neue aussehen". Omni fordert beim
+# Skalieren VMs in genau dieser Form beim Provider an.
+#
+# providerdata ist ein YAML-Block, den der Proxmox-Provider auswertet. Die
+# Feldnamen stammen aus internal/pkg/provider/data.go des Providers und sind
+# durchgaengig snake_case — das README des Providers zeigt an einer Stelle
+# camelCase (cpu, diskSize, storageSelector), das der Code nicht liest.
+metadata:
+  namespace: default
+  type: MachineClasses.omni.sidero.dev
+  id: ${MC_ID}
+spec:
+  autoprovision:
+    providerid: ${PROXMOX_PROVIDER_ID}
+    providerdata: |
+      cores: ${MC_CORES}
+      sockets: ${MC_SOCKETS}
+      memory: ${MC_MEMORY}
+      disk_size: ${MC_DISK_SIZE}
+      # CEL-Ausdruck. Ohne ihn bricht der Provider im Schritt vmSync ab.
+      storage_selector: '${PVE_STORAGE_SELECTOR}'
+      network_bridge: "${PVE_NETWORK_BRIDGE}"
+      vlan: ${PVE_VLAN}
+      placement_strategy: ${PVE_PLACEMENT_STRATEGY}
+      disk_ssd: true
+      disk_discard: true
+      disk_iothread: true
+      tags:
+        - omni
+        - ${CLUSTER_NAME}

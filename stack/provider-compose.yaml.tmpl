@@ -1,0 +1,24 @@
+# Generiert von scripts/40-infra-provider.sh — nicht auf dem Host editieren.
+#
+# Der Proxmox-Infra-Provider laeuft neben Omni auf demselben Host. Er braucht
+# keine eingehenden Ports: er verbindet sich ausgehend zur Omni-API und zur
+# Proxmox-API. Die VMs selbst reden ueber SideroLink direkt mit Omni.
+
+services:
+  proxmox-provider:
+    image: ghcr.io/siderolabs/omni-infra-provider-proxmox:${PROXMOX_PROVIDER_VERSION}
+    container_name: omni-proxmox-provider
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+      # Eigene CA, damit der Provider dem Omni-Zertifikat traut.
+      - ./ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+    extra_hosts:
+      # Omni laeuft im Host-Netz; aus diesem Container ist 127.0.0.1 der
+      # Container selbst, deshalb die Host-IP.
+      - "${OMNI_ENDPOINT}:${OMNI_HOST_IP}"
+    command:
+      - --config-file=/config.yaml
+      - --id=${PROXMOX_PROVIDER_ID}
+      - --omni-api-endpoint=https://${OMNI_ENDPOINT}/
+      - --omni-service-account-key=${INFRA_PROVIDER_KEY}

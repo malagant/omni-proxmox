@@ -1,0 +1,70 @@
+# Generiert von scripts/20-deploy-omni.sh — nicht auf dem Host editieren.
+#
+# Omni laeuft mit network_mode: host, weil SideroLink einen WireGuard-Tunnel
+# aufbaut und dafuer direkten Zugriff auf den Netzwerk-Stack und /dev/net/tun
+# braucht. Das ist auch der Grund, warum Omni nicht unter Docker Desktop oder
+# OrbStack auf macOS laufen kann.
+
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:${DEX_VERSION}
+    container_name: dex
+    restart: unless-stopped
+    command: ["dex", "serve", "/etc/dex/dex.yaml"]
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dex.yaml:/etc/dex/dex.yaml:ro
+      - ./secrets/server-key.pem:/etc/dex/tls/server-key.pem:ro
+      - ./secrets/server-chain.pem:/etc/dex/tls/server-chain.pem:ro
+
+  omni:
+    image: ghcr.io/siderolabs/omni:${OMNI_VERSION}
+    container_name: omni
+    restart: unless-stopped
+    depends_on:
+      - dex
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      # Die eigene CA als Trust-Anchor, damit Omni dem Dex-Zertifikat traut.
+      - ./secrets/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+      - ./secrets/server-key.pem:/server-key.pem:ro
+      - ./secrets/server-chain.pem:/server-chain.pem:ro
+      - ./secrets/omni.asc:/omni.asc:ro
+      - ./sqlite:/_out/sqlite:rw
+    extra_hosts:
+      - "${OMNI_ENDPOINT}:127.0.0.1"
+      - "${AUTH_ENDPOINT}:127.0.0.1"
+    command:
+      - --name=omni
+      - --cert=/server-chain.pem
+      - --key=/server-key.pem
+      - --machine-api-cert=/server-chain.pem
+      - --machine-api-key=/server-key.pem
+      - --machine-api-bind-addr=0.0.0.0:8090
+      - --private-key-source=file:///omni.asc
+      - --event-sink-port=8091
+      - --bind-addr=0.0.0.0:443
+      - --k8s-proxy-bind-addr=0.0.0.0:8100
+      - --advertised-api-url=https://${OMNI_ENDPOINT}/
+      - --siderolink-api-advertised-url=https://${OMNI_ENDPOINT}:8090/
+      # Diese Adresse annonciert Omni den Talos-Nodes fuer den WireGuard-Tunnel.
+      # Sie muss aus dem VM-Netz erreichbar sein — kein 127.0.0.1.
+      - --siderolink-wireguard-advertised-addr=${OMNI_HOST_IP}:50180
+      - --advertised-kubernetes-proxy-url=https://${OMNI_ENDPOINT}:8100/
+      - --auth-auth0-enabled=false
+      - --auth-oidc-enabled=true
+      - --auth-oidc-provider-url=https://${AUTH_ENDPOINT}:5556
+      - --auth-oidc-client-id=omni
+      - --auth-oidc-client-secret=${DEX_CLIENT_SECRET}
+      - --auth-oidc-scopes=openid
+      - --auth-oidc-scopes=profile
+      - --auth-oidc-scopes=email
+      - --sqlite-storage-path=/_out/sqlite/omni.db
+      - --initial-users=${OMNI_USER_EMAIL}
+      - --eula-accept-name=${EULA_NAME}
+      - --eula-accept-email=${EULA_EMAIL}
