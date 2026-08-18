@@ -57,6 +57,12 @@ musst, und keinen Packer-Lauf.
   WireGuard — unter Docker Desktop oder OrbStack auf macOS läuft das nicht.
   Eine kleine Debian- oder Ubuntu-VM auf dem Proxmox-Cluster genügt: 2 vCPU,
   4 GB RAM, 40 GB Disk, Docker installiert, SSH per Key erreichbar.
+* **Rechte auf diesem Host.** Der SSH-Benutzer muss nicht root sein, braucht dann
+  aber Mitgliedschaft in der Gruppe `docker` und passwortloses `sudo`, solange
+  `OMNI_REMOTE_DIR` außerhalb seines Home liegt (der Standard `/opt/omni` tut das).
+  Wer ohne `sudo` auskommen will, setzt `OMNI_REMOTE_DIR="/home/<user>/omni"` —
+  dann bleibt nur der `/etc/hosts`-Eintrag auf dem Host aus, was reiner Komfort ist.
+  Das Preflight prüft beides.
 * Der Host muss aus dem VM-Netz erreichbar sein (Ports 443, 8090, 8091, 8100,
   5556 TCP und 50180 UDP).
 * **Die Proxmox-Nodes brauchen ausgehenden Internetzugang** zu `factory.talos.dev`.

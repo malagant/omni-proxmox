@@ -69,6 +69,37 @@ else
     fail "docker auf dem Omni-Host nicht installiert"
   fi
 
+  # Rechte des SSH-Benutzers. OMNI_SSH muss nicht root sein, aber Verzeichnisse
+  # unter /opt und der /etc/hosts-Eintrag brauchen erhoehte Rechte.
+  detect_host_privileges
+  case "${HOST_ROOT_MODE}" in
+    direct) ok "SSH-Benutzer ist root" ;;
+    sudo)   ok "SSH-Benutzer '${HOST_USER}' hat passwortloses sudo" ;;
+    none)   warn "SSH-Benutzer '${HOST_USER}' hat kein passwortloses sudo" ;;
+  esac
+
+  # Kann der Benutzer docker ueberhaupt bedienen?
+  if on_host 'docker info' >/dev/null 2>&1; then
+    ok "docker ohne sudo nutzbar"
+  elif [[ "${HOST_ROOT_MODE}" != "none" ]] && on_host 'sudo -n docker info' >/dev/null 2>&1; then
+    warn "docker nur mit sudo nutzbar — funktioniert, ist aber unbequem"
+    dim  "sudo usermod -aG docker ${HOST_USER}   (danach neu anmelden)"
+  else
+    fail "docker ist als '${HOST_USER}' nicht nutzbar: sudo usermod -aG docker ${HOST_USER}"
+  fi
+
+  # Laesst sich OMNI_REMOTE_DIR ueberhaupt anlegen?
+  REMOTE_PARENT="$(dirname "${OMNI_REMOTE_DIR}")"
+  if on_host "test -w '${REMOTE_PARENT}'" 2>/dev/null; then
+    ok "${REMOTE_PARENT} ist fuer '${HOST_USER}' beschreibbar"
+  elif [[ "${HOST_ROOT_MODE}" != "none" ]]; then
+    ok "${REMOTE_PARENT} gehoert root — wird per sudo angelegt und uebereignet"
+  else
+    fail "${OMNI_REMOTE_DIR} kann nicht angelegt werden: '${REMOTE_PARENT}' gehoert root und '${HOST_USER}' hat kein sudo.
+     Entweder passwortloses sudo einrichten oder OMNI_REMOTE_DIR ins Home legen,
+     z.B. OMNI_REMOTE_DIR=\"/home/${HOST_USER}/omni\""
+  fi
+
   if on_host "test -e /dev/net/tun" 2>/dev/null; then
     ok "/dev/net/tun vorhanden"
   else

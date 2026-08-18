@@ -96,6 +96,86 @@ host_reachable() {
     "${OMNI_SSH}" true 2>/dev/null
 }
 
+# --- Rechte auf dem Omni-Host ---------------------------------------------
+# OMNI_SSH muss nicht root sein. Verzeichnisse unter /opt und der
+# /etc/hosts-Eintrag brauchen aber Rechte, die ein normaler Benutzer nicht hat.
+HOST_USER=""
+HOST_ROOT_MODE=""    # direct | sudo | none
+
+detect_host_privileges() {
+  if [[ -n "${HOST_ROOT_MODE}" ]]; then return 0; fi
+
+  HOST_USER="$(on_host 'id -un' 2>/dev/null || true)"
+  [[ -n "${HOST_USER}" ]] || die "Konnte den Benutzer auf ${OMNI_SSH} nicht ermitteln"
+
+  if [[ "${HOST_USER}" == "root" ]]; then
+    HOST_ROOT_MODE="direct"
+  elif on_host 'sudo -n true' >/dev/null 2>&1; then
+    HOST_ROOT_MODE="sudo"
+  else
+    HOST_ROOT_MODE="none"
+  fi
+}
+
+host_can_root() {
+  detect_host_privileges
+  [[ "${HOST_ROOT_MODE}" != "none" ]]
+}
+
+# Ein Kommando mit Root-Rechten auf dem Host ausfuehren.
+on_host_root() {
+  local cmd="$1"
+  detect_host_privileges
+  case "${HOST_ROOT_MODE}" in
+    direct) on_host "${cmd}" ;;
+    sudo)   on_host "sudo -n bash -c $(printf '%q' "${cmd}")" ;;
+    none)
+      die "Fuer '${cmd}' werden Root-Rechte auf ${OMNI_SSH} gebraucht.
+     Benutzer '${HOST_USER}' hat kein passwortloses sudo. Zwei Wege:
+       a) sudo ohne Passwort erlauben:
+            echo '${HOST_USER} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/${HOST_USER}
+       b) OMNI_REMOTE_DIR in config/omni.env auf einen Pfad im Home setzen,
+          z.B. OMNI_REMOTE_DIR=\"/home/${HOST_USER}/omni\""
+      ;;
+  esac
+}
+
+# Legt ein Verzeichnis auf dem Host an und uebereignet es dem SSH-Benutzer.
+# Erst ohne Rechteerhoehung versuchen — bei /opt & Co. dann mit.
+ensure_host_dir() {
+  local dir="$1"
+  if on_host "mkdir -p '${dir}'" >/dev/null 2>&1; then
+    return 0
+  fi
+  detect_host_privileges
+  log "${dir} braucht Root-Rechte — lege es an und uebereigne es ${HOST_USER}"
+  on_host_root "mkdir -p '${dir}'"
+  local grp
+  grp="$(on_host 'id -gn' 2>/dev/null || echo "${HOST_USER}")"
+  on_host_root "chown ${HOST_USER}:${grp} '${dir}'"
+}
+
+# --- docker auf dem Host ---------------------------------------------------
+# Ohne Mitgliedschaft in der docker-Gruppe braucht der Aufruf sudo.
+HOST_DOCKER=""
+
+detect_host_docker() {
+  if [[ -n "${HOST_DOCKER}" ]]; then return 0; fi
+
+  if on_host 'docker info' >/dev/null 2>&1; then
+    HOST_DOCKER="docker"
+  elif host_can_root && on_host 'sudo -n docker info' >/dev/null 2>&1; then
+    HOST_DOCKER="sudo -n docker"
+    warn "docker laeuft auf dem Host nur mit sudo."
+    dim  "Angenehmer waere:  sudo usermod -aG docker ${HOST_USER}  (danach neu anmelden)"
+  else
+    detect_host_privileges
+    die "docker ist auf ${OMNI_SSH} als '${HOST_USER}' nicht nutzbar.
+     Benutzer der docker-Gruppe hinzufuegen und neu anmelden:
+       sudo usermod -aG docker ${HOST_USER}"
+  fi
+}
+
 # --- Proxmox ---------------------------------------------------------------
 # PROXMOX_URL enthaelt hier bereits /api2/json (so will es der Provider).
 pve_api() {

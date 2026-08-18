@@ -45,7 +45,7 @@ ok "gerendert"
 
 # --- 3. Auf den Host kopieren ---------------------------------------------
 log "Kopiere nach ${OMNI_SSH}:${OMNI_REMOTE_DIR}"
-on_host "mkdir -p '${OMNI_REMOTE_DIR}'"
+ensure_host_dir "${OMNI_REMOTE_DIR}"
 rsync -a --delete \
   --exclude 'sqlite/' \
   -e "ssh -o StrictHostKeyChecking=accept-new" \
@@ -54,17 +54,28 @@ on_host "mkdir -p '${OMNI_REMOTE_DIR}/sqlite' && chmod 700 '${OMNI_REMOTE_DIR}/s
 ok "kopiert"
 
 # --- 4. Hostnamen auf dem Omni-Host aufloesen ------------------------------
-# Omni redet ueber die .internal-Namen mit sich selbst und mit Dex.
-log "Trage ${OMNI_ENDPOINT} und ${AUTH_ENDPOINT} in /etc/hosts des Hosts ein"
-on_host "grep -q '${OMNI_ENDPOINT}' /etc/hosts || echo '127.0.0.1 ${OMNI_ENDPOINT} ${AUTH_ENDPOINT}' >> /etc/hosts"
-ok "/etc/hosts gesetzt"
+# Die Container loesen die .internal-Namen ueber extra_hosts selbst auf, und die
+# Health-Checks unten gehen ueber 127.0.0.1. Der Eintrag ist also nur Komfort,
+# falls du vom Host aus per Browser oder curl auf die Namen zugreifst — deshalb
+# ist er optional und kein Abbruchgrund.
+if on_host "grep -q '${OMNI_ENDPOINT}' /etc/hosts" 2>/dev/null; then
+  ok "${OMNI_ENDPOINT} steht bereits in /etc/hosts des Hosts"
+elif host_can_root; then
+  log "Trage ${OMNI_ENDPOINT} und ${AUTH_ENDPOINT} in /etc/hosts des Hosts ein"
+  on_host_root "echo '127.0.0.1 ${OMNI_ENDPOINT} ${AUTH_ENDPOINT}' >> /etc/hosts"
+  ok "/etc/hosts gesetzt"
+else
+  warn "Kein Root auf dem Host — /etc/hosts bleibt unveraendert (nur Komfortverlust)"
+fi
 
 # --- 5. Starten ------------------------------------------------------------
+detect_host_docker
+
 log "Starte den Stack"
-on_host "cd '${OMNI_REMOTE_DIR}' && docker compose pull --quiet && docker compose up -d"
+on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose pull --quiet && ${HOST_DOCKER} compose up -d"
 
 log "Container"
-on_host "cd '${OMNI_REMOTE_DIR}' && docker compose ps --format 'table {{.Name}}\t{{.Status}}'" || true
+on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose ps --format 'table {{.Name}}\t{{.Status}}'" || true
 
 # --- 6. Warten und pruefen -------------------------------------------------
 omni_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:443" 2>/dev/null; }
@@ -72,7 +83,7 @@ if wait_for 180 "Omni auf Port 443" omni_up; then
   ok "Omni antwortet"
 else
   warn "Omni antwortet nicht. Logs:"
-  on_host "cd '${OMNI_REMOTE_DIR}' && docker compose logs --tail=40 omni" || true
+  on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=40 omni" || true
   die "Abbruch"
 fi
 
@@ -81,7 +92,7 @@ if wait_for 60 "Dex auf Port 5556" dex_up; then
   ok "Dex antwortet"
 else
   warn "Dex antwortet nicht. Logs:"
-  on_host "cd '${OMNI_REMOTE_DIR}' && docker compose logs --tail=40 dex" || true
+  on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=40 dex" || true
 fi
 
 echo

@@ -67,13 +67,15 @@ ok "gerendert"
 
 # --- 3. Ausrollen ----------------------------------------------------------
 log "Kopiere nach ${OMNI_SSH}:${REMOTE_DIR}"
-on_host "mkdir -p '${REMOTE_DIR}'"
+ensure_host_dir "${REMOTE_DIR}"
 rsync -a --delete -e "ssh -o StrictHostKeyChecking=accept-new" \
   "${STAGE}/" "${OMNI_SSH}:${REMOTE_DIR}/"
 on_host "chmod 700 '${REMOTE_DIR}' && chmod 600 '${REMOTE_DIR}/config.yaml'"
 
+detect_host_docker
+
 log "Starte den Provider"
-on_host "cd '${REMOTE_DIR}' && docker compose pull --quiet && docker compose up -d"
+on_host "cd '${REMOTE_DIR}' && ${HOST_DOCKER} compose pull --quiet && ${HOST_DOCKER} compose up -d"
 
 # --- 4. Verifizieren -------------------------------------------------------
 provider_registered() {
@@ -84,7 +86,7 @@ if wait_for 180 "Registrierung des Providers bei Omni" provider_registered; then
   omni get infraproviderstatus "${PROXMOX_PROVIDER_ID}" || true
 else
   warn "Provider hat sich nicht registriert. Logs:"
-  on_host "cd '${REMOTE_DIR}' && docker compose logs --tail=50" || true
+  on_host "cd '${REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=50" || true
   echo
   dim "Haeufige Ursachen:"
   dim "  - Falscher Key-Typ: es muss ein Infra-Provider-Key sein, kein Service-Account-Key"

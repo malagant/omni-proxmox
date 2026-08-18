@@ -48,14 +48,19 @@ warn "Damit ist auch der Omni-Zustand weg (etcd, sqlite) — Cluster waeren nich
 read -rp "Wirklich? [j/N] " a
 [[ "${a}" =~ ^[jJyY]$ ]] || { log "Abgebrochen."; exit 0; }
 
+detect_host_docker
+
 log "Stoppe den Provider"
-on_host "cd '${OMNI_REMOTE_DIR}/provider' 2>/dev/null && docker compose down -v" || warn "Provider nicht gefunden"
+on_host "cd '${OMNI_REMOTE_DIR}/provider' 2>/dev/null && ${HOST_DOCKER} compose down -v" || warn "Provider nicht gefunden"
 
 log "Stoppe Omni"
-on_host "cd '${OMNI_REMOTE_DIR}' 2>/dev/null && docker compose down -v" || warn "Omni nicht gefunden"
+on_host "cd '${OMNI_REMOTE_DIR}' 2>/dev/null && ${HOST_DOCKER} compose down -v" || warn "Omni nicht gefunden"
 
 log "Entferne ${OMNI_REMOTE_DIR}"
-on_host "rm -rf '${OMNI_REMOTE_DIR}'"
+# Liegt das Verzeichnis unter /opt, gehoert das uebergeordnete Verzeichnis root.
+if ! on_host "rm -rf '${OMNI_REMOTE_DIR}'" 2>/dev/null; then
+  on_host_root "rm -rf '${OMNI_REMOTE_DIR}'"
+fi
 
 rm -f "${REPO_ROOT}/${CLUSTER_NAME}.kubeconfig" "${REPO_ROOT}/${CLUSTER_NAME}.talosconfig"
 ok "abgebaut"
