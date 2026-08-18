@@ -4,7 +4,8 @@ Provisioniert einen Talos-Linux-Cluster auf Proxmox VE über ein selbst gehostet
 [Omni](https://github.com/siderolabs/omni) und den offiziellen
 [Proxmox-Infrastructure-Provider](https://github.com/siderolabs/omni-infra-provider-proxmox).
 
-Schwesterprojekt zu `../k8s`, das denselben Zweck über Cluster API und kubeadm löst.
+Schwesterprojekt zu [malagant/capi-proxmox](https://github.com/malagant/capi-proxmox),
+das denselben Zweck über Cluster API und kubeadm löst.
 Der Vergleich steht unten unter [Verhältnis zum Cluster-API-Repo](#verhältnis-zum-cluster-api-repo).
 
 ## Lizenz — bitte zuerst lesen
@@ -140,7 +141,8 @@ OIDC-Variante (`omnictl kubeconfig -c <cluster>`) braucht zusätzlich das
 dem VM-Netz nicht erreichbar ist, starten die VMs, bleiben aber unsichtbar.
 
 **`PROXMOX_URL` braucht `/api2/json`.** Der Provider erwartet die vollständige
-API-URL. Das Cluster-API-Repo nebenan will dieselbe URL **ohne** diesen Pfad —
+API-URL. [capi-proxmox](https://github.com/malagant/capi-proxmox) will dieselbe URL
+**ohne** diesen Pfad —
 eine häufige Verwechslung, wenn man beide Repos parallel betreibt.
 
 **Ohne `storage_selector` bricht die Provisionierung ab.** Der Provider meldet den
@@ -196,7 +198,7 @@ scripts/99-teardown.sh --all    # zusätzlich Provider und Omni-Stack
 
 ## Verhältnis zum Cluster-API-Repo
 
-|  | `../k8s` (Cluster API) | dieses Repo (Omni) |
+|  | [capi-proxmox](https://github.com/malagant/capi-proxmox) (Cluster API) | dieses Repo (Omni) |
 |---|---|---|
 | Node-OS | Ubuntu 24.04 | Talos Linux |
 | Steuerebene | CAPI-Controller im Cluster | Omni auf eigenem Host |
