@@ -9,7 +9,9 @@ fail() { printf '%sfail%s %s\n' "${C_RED}" "${C_OFF}" "$*" >&2; FAILED=1; }
 
 # --- 1. Lokales Tooling ----------------------------------------------------
 log "Lokales Tooling"
-for c in ssh rsync curl jq openssl gpg; do
+LOCAL_TOOLS=(rsync curl jq openssl gpg)
+host_is_local || LOCAL_TOOLS+=(ssh)
+for c in "${LOCAL_TOOLS[@]}"; do
   if command -v "$c" >/dev/null 2>&1; then
     ok "$c"
   else
@@ -22,7 +24,7 @@ ok "omnictl ${OMNI_VERSION}  ${OMNICTL}"
 
 # --- 2. Pflichtvariablen ---------------------------------------------------
 log "Konfiguration"
-require_vars OMNI_SSH OMNI_HOST_IP OMNI_ENDPOINT AUTH_ENDPOINT OMNI_USER_EMAIL \
+require_vars OMNI_HOST_IP OMNI_ENDPOINT AUTH_ENDPOINT OMNI_USER_EMAIL \
              OMNI_REMOTE_DIR OMNI_VERSION DEX_VERSION PROXMOX_PROVIDER_VERSION \
              PROXMOX_URL PROXMOX_PROVIDER_ID PVE_STORAGE_SELECTOR \
              PVE_NETWORK_BRIDGE CLUSTER_NAME TALOS_VERSION KUBERNETES_VERSION \
@@ -50,11 +52,15 @@ else
 fi
 
 # --- 3. Omni-Host ----------------------------------------------------------
-log "Omni-Host (${OMNI_SSH})"
+log "Omni-Host ($(host_label))"
 if ! host_reachable; then
   fail "SSH zu ${OMNI_SSH} nicht moeglich (BatchMode — Key-Auth noetig)"
 else
-  ok "SSH erreichbar"
+  if host_is_local; then
+    ok "laeuft direkt auf dem Omni-Host (OMNI_SSH leer)"
+  else
+    ok "SSH erreichbar"
+  fi
 
   HOST_OS="$(on_host uname -s 2>/dev/null || echo unknown)"
   if [[ "${HOST_OS}" == "Linux" ]]; then
@@ -69,13 +75,13 @@ else
     fail "docker auf dem Omni-Host nicht installiert"
   fi
 
-  # Rechte des SSH-Benutzers. OMNI_SSH muss nicht root sein, aber Verzeichnisse
-  # unter /opt und der /etc/hosts-Eintrag brauchen erhoehte Rechte.
+  # Rechte des ausfuehrenden Benutzers. Der muss nicht root sein, aber
+  # Verzeichnisse unter /opt und der /etc/hosts-Eintrag brauchen mehr Rechte.
   detect_host_privileges
   case "${HOST_ROOT_MODE}" in
-    direct) ok "SSH-Benutzer ist root" ;;
-    sudo)   ok "SSH-Benutzer '${HOST_USER}' hat passwortloses sudo" ;;
-    none)   warn "SSH-Benutzer '${HOST_USER}' hat kein passwortloses sudo" ;;
+    direct) ok "Benutzer ist root" ;;
+    sudo)   ok "Benutzer '${HOST_USER}' hat passwortloses sudo" ;;
+    none)   warn "Benutzer '${HOST_USER}' hat kein passwortloses sudo" ;;
   esac
 
   # Kann der Benutzer docker ueberhaupt bedienen?

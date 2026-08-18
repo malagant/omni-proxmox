@@ -6,7 +6,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
-require_vars CLUSTER_NAME OMNI_SSH OMNI_REMOTE_DIR
+require_vars CLUSTER_NAME OMNI_REMOTE_DIR
 
 ensure_omnictl
 
@@ -43,7 +43,7 @@ fi
 
 # --- 2. Provider und Omni --------------------------------------------------
 echo
-warn "Jetzt werden Provider und Omni-Stack auf ${OMNI_SSH} gestoppt und entfernt."
+warn "Jetzt werden Provider und Omni-Stack auf $(host_label) gestoppt und entfernt."
 warn "Damit ist auch der Omni-Zustand weg (etcd, sqlite) — Cluster waeren nicht mehr verwaltbar."
 read -rp "Wirklich? [j/N] " a
 [[ "${a}" =~ ^[jJyY]$ ]] || { log "Abgebrochen."; exit 0; }

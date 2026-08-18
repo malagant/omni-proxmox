@@ -85,15 +85,46 @@ omni() {
 }
 
 # --- Omni-Host -------------------------------------------------------------
+# Die Skripte laufen entweder von einem Arbeitsrechner aus per SSH gegen den
+# Omni-Host, oder direkt auf dem Omni-Host selbst. Letzteres wird durch ein
+# leeres OMNI_SSH (oder "local") angezeigt und vermeidet SSH-zu-sich-selbst.
+host_is_local() {
+  [[ -z "${OMNI_SSH:-}" || "${OMNI_SSH}" == "local" || "${OMNI_SSH}" == "localhost" ]]
+}
+
+# Beschreibt das Ziel fuer Ausgaben.
+host_label() {
+  if host_is_local; then echo "diesem Host"; else echo "${OMNI_SSH}"; fi
+}
+
 # Kommando auf dem Omni-Host ausfuehren.
 on_host() {
-  require_vars OMNI_SSH
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${OMNI_SSH}" "$@"
+  if host_is_local; then
+    bash -c "$*"
+  else
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${OMNI_SSH}" "$@"
+  fi
 }
 
 host_reachable() {
+  if host_is_local; then
+    return 0
+  fi
   ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
     "${OMNI_SSH}" true 2>/dev/null
+}
+
+# Verzeichnis auf den Omni-Host spiegeln. Lokal ohne SSH-Transport.
+# Usage: host_sync <quelle/> <ziel/> [weitere rsync-Argumente]
+host_sync() {
+  local src="$1" dst="$2"; shift 2
+  if host_is_local; then
+    rsync -a --delete "$@" "${src}" "${dst}"
+  else
+    rsync -a --delete "$@" \
+      -e "ssh -o StrictHostKeyChecking=accept-new" \
+      "${src}" "${OMNI_SSH}:${dst}"
+  fi
 }
 
 # --- Rechte auf dem Omni-Host ---------------------------------------------
@@ -106,7 +137,7 @@ detect_host_privileges() {
   if [[ -n "${HOST_ROOT_MODE}" ]]; then return 0; fi
 
   HOST_USER="$(on_host 'id -un' 2>/dev/null || true)"
-  [[ -n "${HOST_USER}" ]] || die "Konnte den Benutzer auf ${OMNI_SSH} nicht ermitteln"
+  [[ -n "${HOST_USER}" ]] || die "Konnte den Benutzer auf $(host_label) nicht ermitteln"
 
   if [[ "${HOST_USER}" == "root" ]]; then
     HOST_ROOT_MODE="direct"
@@ -128,9 +159,15 @@ on_host_root() {
   detect_host_privileges
   case "${HOST_ROOT_MODE}" in
     direct) on_host "${cmd}" ;;
-    sudo)   on_host "sudo -n bash -c $(printf '%q' "${cmd}")" ;;
+    sudo)
+      if host_is_local; then
+        sudo -n bash -c "${cmd}"
+      else
+        on_host "sudo -n bash -c $(printf '%q' "${cmd}")"
+      fi
+      ;;
     none)
-      die "Fuer '${cmd}' werden Root-Rechte auf ${OMNI_SSH} gebraucht.
+      die "Fuer '${cmd}' werden Root-Rechte auf $(host_label) gebraucht.
      Benutzer '${HOST_USER}' hat kein passwortloses sudo. Zwei Wege:
        a) sudo ohne Passwort erlauben:
             echo '${HOST_USER} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/${HOST_USER}
@@ -170,7 +207,7 @@ detect_host_docker() {
     dim  "Angenehmer waere:  sudo usermod -aG docker ${HOST_USER}  (danach neu anmelden)"
   else
     detect_host_privileges
-    die "docker ist auf ${OMNI_SSH} als '${HOST_USER}' nicht nutzbar.
+    die "docker ist auf $(host_label) als '${HOST_USER}' nicht nutzbar.
      Benutzer der docker-Gruppe hinzufuegen und neu anmelden:
        sudo usermod -aG docker ${HOST_USER}"
   fi

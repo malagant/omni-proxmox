@@ -3,7 +3,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
-require_vars OMNI_SSH OMNI_HOST_IP OMNI_ENDPOINT AUTH_ENDPOINT OMNI_USER_EMAIL \
+require_vars OMNI_HOST_IP OMNI_ENDPOINT AUTH_ENDPOINT OMNI_USER_EMAIL \
              OMNI_REMOTE_DIR OMNI_VERSION DEX_VERSION
 
 need_cmd rsync
@@ -44,12 +44,9 @@ chmod 644 "${STAGE}/secrets/ca.pem" "${STAGE}/secrets/server-chain.pem"
 ok "gerendert"
 
 # --- 3. Auf den Host kopieren ---------------------------------------------
-log "Kopiere nach ${OMNI_SSH}:${OMNI_REMOTE_DIR}"
+log "Uebertrage nach $(host_label):${OMNI_REMOTE_DIR}"
 ensure_host_dir "${OMNI_REMOTE_DIR}"
-rsync -a --delete \
-  --exclude 'sqlite/' \
-  -e "ssh -o StrictHostKeyChecking=accept-new" \
-  "${STAGE}/" "${OMNI_SSH}:${OMNI_REMOTE_DIR}/"
+host_sync "${STAGE}/" "${OMNI_REMOTE_DIR}/" --exclude 'sqlite/' 
 on_host "mkdir -p '${OMNI_REMOTE_DIR}/sqlite' && chmod 700 '${OMNI_REMOTE_DIR}/secrets'"
 ok "kopiert"
 
@@ -96,5 +93,5 @@ else
 fi
 
 echo
-ok "Omni laeuft auf ${OMNI_SSH}."
+ok "Omni laeuft auf $(host_label)."
 dim "Naechster Schritt: scripts/30-client-setup.sh"

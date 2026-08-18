@@ -33,8 +33,8 @@ Quelle: [Production vs. Non-Production Use](https://docs.siderolabs.com/omni/sel
 ## Wie das zusammenspielt
 
 ```
-  dein Mac                    Omni-Host (Linux)                Proxmox-Cluster
-  ────────                    ─────────────────                ───────────────
+  Arbeitsrechner              Omni-Host (Linux)                Proxmox-Cluster
+  (oder der Host selbst)      ─────────────────                ───────────────
   omnictl  ──── HTTPS 443 ──▶  Omni                            pve1  pve2  pve3
   Browser  ──── HTTPS 5556 ─▶  Dex (OIDC)                        │
                                Proxmox-Provider ── API ─────────▶│ legt VMs an
@@ -56,21 +56,32 @@ musst, und keinen Packer-Lauf.
 * **Ein Linux-Host für Omni.** Omni braucht `--net=host`, `/dev/net/tun` und
   WireGuard — unter Docker Desktop oder OrbStack auf macOS läuft das nicht.
   Eine kleine Debian- oder Ubuntu-VM auf dem Proxmox-Cluster genügt: 2 vCPU,
-  4 GB RAM, 40 GB Disk, Docker installiert, SSH per Key erreichbar.
-* **Rechte auf diesem Host.** Der SSH-Benutzer muss nicht root sein, braucht dann
-  aber Mitgliedschaft in der Gruppe `docker` und passwortloses `sudo`, solange
-  `OMNI_REMOTE_DIR` außerhalb seines Home liegt (der Standard `/opt/omni` tut das).
-  Wer ohne `sudo` auskommen will, setzt `OMNI_REMOTE_DIR="/home/<user>/omni"` —
-  dann bleibt nur der `/etc/hosts`-Eintrag auf dem Host aus, was reiner Komfort ist.
-  Das Preflight prüft beides.
+  4 GB RAM, 40 GB Disk, Docker installiert.
 * Der Host muss aus dem VM-Netz erreichbar sein (Ports 443, 8090, 8091, 8100,
   5556 TCP und 50180 UDP).
 * **Die Proxmox-Nodes brauchen ausgehenden Internetzugang** zu `factory.talos.dev`.
 * Ein Proxmox-Storage mit Content-Typ `iso` für die Talos-Images.
-* Lokal: `ssh`, `rsync`, `curl`, `jq`, `openssl`, `gpg`, `docker`, `bash >= 4`.
+* Werkzeuge: `rsync`, `curl`, `jq`, `openssl`, `gpg`, `docker`, `bash >= 4`
+  (im Fernbetrieb zusätzlich `ssh`).
 
 `omnictl` wird nicht vorausgesetzt — die Skripte laden die zur Omni-Version
 passende Fassung nach `bin/`.
+
+### Wo die Skripte laufen
+
+Beides geht, gesteuert über `OMNI_SSH` in `config/omni.env`:
+
+| `OMNI_SSH` | Bedeutung |
+|---|---|
+| leer (Standard) | Die Skripte laufen **auf dem Omni-Host selbst**. Kein SSH, kein rsync über Netz. |
+| `user@host` | Die Skripte laufen auf deinem Arbeitsrechner und steuern den Omni-Host per SSH. |
+
+In beiden Fällen muss der ausführende Benutzer nicht root sein, braucht dann
+aber Mitgliedschaft in der Gruppe `docker` und passwortloses `sudo`, solange
+`OMNI_REMOTE_DIR` außerhalb seines Home liegt (der Standard `/opt/omni` tut das).
+Wer ohne `sudo` auskommen will, setzt `OMNI_REMOTE_DIR="/home/<user>/omni"` —
+dann bleibt nur der `/etc/hosts`-Eintrag aus, was reiner Komfort ist. Das
+Preflight prüft beides und sagt konkret, was fehlt.
 
 ## Ablauf
 

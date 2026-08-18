@@ -4,7 +4,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
-require_vars OMNI_SSH OMNI_ENDPOINT OMNI_HOST_IP OMNI_REMOTE_DIR \
+require_vars OMNI_ENDPOINT OMNI_HOST_IP OMNI_REMOTE_DIR \
              PROXMOX_PROVIDER_ID PROXMOX_PROVIDER_VERSION PROXMOX_URL
 
 need_cmd rsync
@@ -66,10 +66,9 @@ cp "${SECRETS_DIR}/ca.pem" "${STAGE}/ca.pem"
 ok "gerendert"
 
 # --- 3. Ausrollen ----------------------------------------------------------
-log "Kopiere nach ${OMNI_SSH}:${REMOTE_DIR}"
+log "Uebertrage nach $(host_label):${REMOTE_DIR}"
 ensure_host_dir "${REMOTE_DIR}"
-rsync -a --delete -e "ssh -o StrictHostKeyChecking=accept-new" \
-  "${STAGE}/" "${OMNI_SSH}:${REMOTE_DIR}/"
+host_sync "${STAGE}/" "${REMOTE_DIR}/"
 on_host "chmod 700 '${REMOTE_DIR}' && chmod 600 '${REMOTE_DIR}/config.yaml'"
 
 detect_host_docker
