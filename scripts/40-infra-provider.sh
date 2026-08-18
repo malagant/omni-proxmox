@@ -14,7 +14,12 @@ KEY_FILE="${SECRETS_DIR}/infra-provider-key"
 STAGE="${OUT_DIR}/proxmox-provider"
 REMOTE_DIR="${OMNI_REMOTE_DIR}/provider"
 
-[[ -s "${SECRETS_DIR}/ca.pem" ]] || die "secrets/ca.pem fehlt — erst scripts/10-secrets.sh ausfuehren"
+if [[ ! -e "${SECRETS_DIR}/ca.pem" ]]; then
+  die "secrets/ca.pem fehlt — erst scripts/10-secrets.sh ausfuehren"
+elif [[ ! -r "${SECRETS_DIR}/ca.pem" ]]; then
+  die "secrets/ca.pem ist nicht lesbar. Frueherer Lauf mit sudo?
+     Reparieren:  sudo chown -R $(id -un) '${SECRETS_DIR}'"
+fi
 
 # --- 1. Infra-Provider-Key -------------------------------------------------
 # Achtung: das ist ein Infra-Provider-Key, kein normaler Service-Account-Key.
@@ -39,8 +44,7 @@ export INFRA_PROVIDER_KEY
 
 # --- 2. Provider-Konfiguration ---------------------------------------------
 log "Rendere Provider-Stack nach ${STAGE}"
-rm -rf "${STAGE}"
-mkdir -p "${STAGE}"
+reset_stage_dir "${STAGE}"
 
 # Token-Auth wenn moeglich, sonst Benutzer/Passwort.
 {

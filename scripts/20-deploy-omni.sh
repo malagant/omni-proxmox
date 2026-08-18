@@ -13,7 +13,14 @@ STAGE="${OUT_DIR}/omni-host"
 
 # --- 1. Geheimnisse einlesen ----------------------------------------------
 for f in ca.pem server-key.pem server-chain.pem omni.asc dex-password.hash dex-client-secret; do
-  [[ -s "${SECRETS_DIR}/${f}" ]] || die "secrets/${f} fehlt — erst scripts/10-secrets.sh ausfuehren"
+  if [[ ! -e "${SECRETS_DIR}/${f}" ]]; then
+    die "secrets/${f} fehlt — erst scripts/10-secrets.sh ausfuehren"
+  elif [[ ! -r "${SECRETS_DIR}/${f}" ]]; then
+    # Typisch, wenn 10-secrets.sh mit sudo lief: die Dateien gehoeren dann root
+    # und haben Modus 600.
+    die "secrets/${f} ist nicht lesbar. Frueherer Lauf mit sudo?
+     Reparieren:  sudo chown -R $(id -un) '${SECRETS_DIR}'"
+  fi
 done
 
 DEX_PASSWORD_HASH="$(cat "${SECRETS_DIR}/dex-password.hash")"
@@ -22,7 +29,7 @@ export DEX_PASSWORD_HASH DEX_CLIENT_SECRET
 
 # --- 2. Stack rendern ------------------------------------------------------
 log "Rendere Stack nach ${STAGE}"
-rm -rf "${STAGE}"
+reset_stage_dir "${STAGE}"
 mkdir -p "${STAGE}/secrets" "${STAGE}/sqlite"
 
 render_template "${REPO_ROOT}/stack/docker-compose.yaml.tmpl" "${STAGE}/docker-compose.yaml"

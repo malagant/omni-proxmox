@@ -83,6 +83,12 @@ Wer ohne `sudo` auskommen will, setzt `OMNI_REMOTE_DIR="/home/<user>/omni"` —
 dann bleibt nur der `/etc/hosts`-Eintrag aus, was reiner Komfort ist. Das
 Preflight prüft beides und sagt konkret, was fehlt.
 
+Die Skripte selbst **nicht** mit `sudo` starten. Sie rufen `sudo` gezielt dort
+auf, wo es nötig ist. Ein kompletter Lauf unter `sudo` legt dagegen root-eigene
+Dateien in `out/` und `secrets/` an, die den nächsten Lauf als normaler Benutzer
+blockieren. Passiert es doch, räumen die Skripte `out/` beim nächsten Mal selbst
+auf und weisen bei `secrets/` auf den `chown` hin.
+
 ## Ablauf
 
 ```bash
@@ -205,6 +211,8 @@ ssh root@omni.lan 'cd /opt/omni/provider && docker compose logs -f'
 | `omnictl` bekommt nur Fehler | EULA nicht bestätigt, CA nicht vertraut, oder `omni.internal` löst nicht auf |
 | Browser warnt vor dem Zertifikat | CA nicht im Schlüsselbund — `scripts/30-client-setup.sh` |
 | VM-Klon schlägt fehl | `PVE_STORAGE_SELECTOR` zeigt auf einen Storage, den der Zielnode nicht hat |
+| `rm: cannot remove .../out/...: Permission denied` | Ein früherer Lauf lief unter `sudo` und hat root-eigene Dateien im Repo hinterlassen |
+| `secrets/... ist nicht lesbar` | dito — `sudo chown -R $(id -un) secrets/` |
 
 ## Abbau
 

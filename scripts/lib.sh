@@ -37,6 +37,25 @@ load_config() {
      cp config/omni.env.example config/omni.env"
   # shellcheck disable=SC1090
   set -a; source "${CONFIG_FILE}"; set +a
+  check_invocation_user
+}
+
+# Das ganze Skript unter sudo zu starten hinterlaesst root-eigene Dateien in
+# out/ und secrets/, die den naechsten Lauf als normaler Benutzer blockieren.
+# Die Skripte rufen sudo gezielt dort auf, wo es wirklich noetig ist.
+check_invocation_user() {
+  [[ "${EUID:-$(id -u)}" -eq 0 ]] || return 0
+
+  local owner
+  owner="$(stat -c '%U' "${REPO_ROOT}" 2>/dev/null \
+        || stat -f '%Su' "${REPO_ROOT}" 2>/dev/null \
+        || echo root)"
+  [[ "${owner}" != "root" ]] || return 0
+
+  warn "Das Skript laeuft als root, das Repo gehoert aber '${owner}'."
+  dim  "Dabei entstehen root-eigene Dateien in out/ und secrets/, die dich beim"
+  dim  "naechsten Lauf als '${owner}' blockieren. Besser als '${owner}' starten —"
+  dim  "die Skripte rufen sudo gezielt dort auf, wo sie es brauchen."
 }
 
 require_vars() {
@@ -249,6 +268,39 @@ if missing:
     sys.exit("Nicht gesetzte Variablen im Template %s: %s" % (src, ", ".join(sorted(set(missing)))))
 open(dst, "w").write(out)
 ' "${src}" "${dst}"
+}
+
+# --- Staging ---------------------------------------------------------------
+# Leert ein Arbeitsverzeichnis unter out/. Raeumt dabei auch Reste auf, die ein
+# frueherer Lauf mit sudo hinterlassen hat und die dem Benutzer nicht gehoeren.
+reset_stage_dir() {
+  local dir="$1"
+
+  # Sicherheitsnetz: nur innerhalb von out/ loeschen.
+  case "${dir}" in
+    "${OUT_DIR}"/?*) : ;;
+    *) die "reset_stage_dir: '${dir}' liegt nicht unterhalb von ${OUT_DIR}" ;;
+  esac
+
+  if [[ ! -e "${dir}" ]]; then
+    mkdir -p "${dir}"
+    return 0
+  fi
+
+  if rm -rf "${dir}" 2>/dev/null; then
+    mkdir -p "${dir}"
+    return 0
+  fi
+
+  warn "${dir} enthaelt Dateien, die dir nicht gehoeren."
+  dim  "Typisch nach einem Lauf mit 'sudo ./scripts/...'. Ich raeume das mit sudo auf."
+  if sudo rm -rf "${dir}"; then
+    ok "aufgeraeumt"
+  else
+    die "Konnte ${dir} nicht entfernen. Von Hand:
+     sudo rm -rf '${dir}'"
+  fi
+  mkdir -p "${dir}"
 }
 
 # --- Warten ----------------------------------------------------------------
