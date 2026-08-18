@@ -15,6 +15,10 @@ services:
     # Schluessel (Modus 600, Eigentuemer des Deploy-Benutzers) nicht lesen.
     # Deshalb dieselbe UID wie die der gemounteten Dateien.
     user: "${HOST_UID}:${HOST_GID}"
+    labels:
+      # Aendert sich dex.yaml, aendert sich dieses Label und Compose erzeugt den
+      # Container neu. Der Bind-Mount allein wuerde keinen Neustart ausloesen.
+      omni-proxmox.dex-config: "${DEX_CONFIG_SHA}"
     ports:
       - "5556:5556"
     volumes:

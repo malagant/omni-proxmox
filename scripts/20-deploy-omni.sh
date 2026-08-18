@@ -36,8 +36,15 @@ log "Rendere Stack nach ${STAGE}"
 reset_stage_dir "${STAGE}"
 mkdir -p "${STAGE}/secrets" "${STAGE}/sqlite"
 
+# dex.yaml zuerst: aus ihrem Inhalt entsteht eine Pruefsumme, die als Label in
+# die Compose-Datei geht. Ohne die wuerde eine geaenderte dex.yaml keinen
+# Neustart ausloesen — sie ist ein Bind-Mount, und Compose sieht nur die
+# Service-Definition. Ein neues Passwort waere sonst wirkungslos.
+render_template "${REPO_ROOT}/stack/dex.yaml.tmpl" "${STAGE}/dex.yaml"
+DEX_CONFIG_SHA="$(openssl dgst -sha256 "${STAGE}/dex.yaml" | awk '{print $NF}' | cut -c1-16)"
+export DEX_CONFIG_SHA
+
 render_template "${REPO_ROOT}/stack/docker-compose.yaml.tmpl" "${STAGE}/docker-compose.yaml"
-render_template "${REPO_ROOT}/stack/dex.yaml.tmpl"            "${STAGE}/dex.yaml"
 
 # Ohne EULA-Angaben die Flags entfernen — Omni lehnt leere Werte ab.
 if [[ -z "${EULA_NAME:-}" || -z "${EULA_EMAIL:-}" ]]; then
