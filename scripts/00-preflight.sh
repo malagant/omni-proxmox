@@ -112,13 +112,22 @@ else
     fail "/dev/net/tun fehlt — WireGuard/SideroLink kann nicht starten"
   fi
 
-  # Belegte Ports wuerden den Start still scheitern lassen.
-  for p in 443 8090 8091 8100 5556; do
-    if on_host "ss -ltn 2>/dev/null | grep -q ':${p} '" 2>/dev/null; then
-      fail "Port ${p}/tcp auf dem Omni-Host ist bereits belegt"
-    fi
-  done
-  ok "Ports 443, 8090, 8091, 8100, 5556 frei"
+  # Belegte Ports wuerden den Start still scheitern lassen. Laeuft der Stack
+  # bereits, belegt er die Ports selbst — das ist kein Fehler, sondern der
+  # Normalfall bei jedem erneuten Preflight nach dem Ausrollen.
+  if on_host "docker ps --format '{{.Names}}' 2>/dev/null | grep -qx omni \
+              || sudo -n docker ps --format '{{.Names}}' 2>/dev/null | grep -qx omni" 2>/dev/null; then
+    ok "Omni-Stack laeuft bereits — Portpruefung uebersprungen"
+  else
+    PORTS_BUSY=0
+    for p in 443 8090 8091 8100 5556; do
+      if on_host "ss -ltn 2>/dev/null | grep -q ':${p} '" 2>/dev/null; then
+        fail "Port ${p}/tcp auf dem Omni-Host ist bereits belegt"
+        PORTS_BUSY=1
+      fi
+    done
+    (( PORTS_BUSY )) || ok "Ports 443, 8090, 8091, 8100, 5556 frei"
+  fi
 
   # Die IP muss auf dem Host tatsaechlich existieren, sonst annonciert
   # SideroLink eine Adresse, unter der die VMs nichts finden.
