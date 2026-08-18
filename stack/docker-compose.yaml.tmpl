@@ -11,19 +11,32 @@ services:
     container_name: dex
     restart: unless-stopped
     command: ["dex", "serve", "/etc/dex/dex.yaml"]
+    # Das Image laeuft ab Werk als 1001:1001 und koennte den privaten
+    # Schluessel (Modus 600, Eigentuemer des Deploy-Benutzers) nicht lesen.
+    # Deshalb dieselbe UID wie die der gemounteten Dateien.
+    user: "${HOST_UID}:${HOST_GID}"
     ports:
       - "5556:5556"
     volumes:
       - ./dex.yaml:/etc/dex/dex.yaml:ro
       - ./secrets/server-key.pem:/etc/dex/tls/server-key.pem:ro
       - ./secrets/server-chain.pem:/etc/dex/tls/server-chain.pem:ro
+    healthcheck:
+      # Omni beendet sich beim Start, wenn Dex' OIDC-Discovery nicht antwortet.
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null",
+             "https://127.0.0.1:5556/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   omni:
     image: ghcr.io/siderolabs/omni:${OMNI_VERSION}
     container_name: omni
     restart: unless-stopped
     depends_on:
-      - dex
+      dex:
+        condition: service_healthy
     network_mode: host
     cap_add:
       - NET_ADMIN

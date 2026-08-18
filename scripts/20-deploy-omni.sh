@@ -28,6 +28,10 @@ DEX_CLIENT_SECRET="$(cat "${SECRETS_DIR}/dex-client-secret")"
 export DEX_PASSWORD_HASH DEX_CLIENT_SECRET
 
 # --- 2. Stack rendern ------------------------------------------------------
+# Liefert HOST_UID/HOST_GID — das Compose-Template braucht sie fuer den
+# dex-Container, der sonst den privaten Schluessel nicht lesen kann.
+detect_host_privileges
+
 log "Rendere Stack nach ${STAGE}"
 reset_stage_dir "${STAGE}"
 mkdir -p "${STAGE}/secrets" "${STAGE}/sqlite"
@@ -82,21 +86,36 @@ log "Container"
 on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose ps --format 'table {{.Name}}\t{{.Status}}'" || true
 
 # --- 6. Warten und pruefen -------------------------------------------------
+# Bei einem Fehlschlag immer beide Container zeigen. Ein Fehler in dex aeussert
+# sich in den omni-Logs nur als "connection refused" und fuehrt in die Irre.
+dump_stack_diagnostics() {
+  echo
+  warn "Container-Status:"
+  on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose ps -a --format 'table {{.Name}}\t{{.Status}}'" || true
+  for svc in dex omni; do
+    echo
+    warn "Logs ${svc}:"
+    on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=30 ${svc}" || true
+  done
+}
+
+# --- 6. Warten und pruefen -------------------------------------------------
+# Dex zuerst: Omni beendet sich beim Start, wenn dessen OIDC-Discovery nicht
+# antwortet. Ein Fehler hier ist also die eigentliche Ursache, nicht die Folge.
+dex_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:5556/.well-known/openid-configuration" 2>/dev/null; }
+if wait_for 120 "Dex auf Port 5556" dex_up; then
+  ok "Dex antwortet"
+else
+  dump_stack_diagnostics
+  die "Dex kam nicht hoch — ohne ihn startet Omni nicht"
+fi
+
 omni_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:443" 2>/dev/null; }
 if wait_for 180 "Omni auf Port 443" omni_up; then
   ok "Omni antwortet"
 else
-  warn "Omni antwortet nicht. Logs:"
-  on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=40 omni" || true
+  dump_stack_diagnostics
   die "Abbruch"
-fi
-
-dex_up() { on_host "curl -sk -o /dev/null https://127.0.0.1:5556/.well-known/openid-configuration" 2>/dev/null; }
-if wait_for 60 "Dex auf Port 5556" dex_up; then
-  ok "Dex antwortet"
-else
-  warn "Dex antwortet nicht. Logs:"
-  on_host "cd '${OMNI_REMOTE_DIR}' && ${HOST_DOCKER} compose logs --tail=40 dex" || true
 fi
 
 echo

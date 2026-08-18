@@ -150,6 +150,8 @@ host_sync() {
 # OMNI_SSH muss nicht root sein. Verzeichnisse unter /opt und der
 # /etc/hosts-Eintrag brauchen aber Rechte, die ein normaler Benutzer nicht hat.
 HOST_USER=""
+HOST_UID=""
+HOST_GID=""
 HOST_ROOT_MODE=""    # direct | sudo | none
 
 detect_host_privileges() {
@@ -157,6 +159,12 @@ detect_host_privileges() {
 
   HOST_USER="$(on_host 'id -un' 2>/dev/null || true)"
   [[ -n "${HOST_USER}" ]] || die "Konnte den Benutzer auf $(host_label) nicht ermitteln"
+
+  # Container, die gemountete Dateien lesen muessen, laufen unter dieser UID —
+  # sonst scheitert der Zugriff auf Schluessel mit Modus 600.
+  HOST_UID="$(on_host 'id -u' 2>/dev/null || true)"
+  HOST_GID="$(on_host 'id -g' 2>/dev/null || true)"
+  export HOST_UID HOST_GID
 
   if [[ "${HOST_USER}" == "root" ]]; then
     HOST_ROOT_MODE="direct"
